@@ -1,0 +1,557 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib
+import pandas as pd
+from sklearn.svm import LinearSVC
+
+class Q1():
+	def __init__(self):
+		self.randomState = 0
+		self.tolerance = 1e-10
+		self.maxIters = 1e6
+		self.C = [0.001, 0.01, 0.1, 1, 10]
+		#name_attributenumber_datasetnumber
+		self.dataset_1 = {
+			'name': 'HW 3 Dataset 1',
+			'filename': 'hw3_dataset1.csv',
+			'col_names': ['att_1_1', 'att_2_1', 'label_1']
+		}
+		self.dataset_2 = {
+			'name': 'HW 3 Dataset 2',
+		    'filename': 'hw3_dataset2.csv',
+		    'col_names': ['att_1_2', 'att_2_2', 'label_2']
+		}
+		self.color = ['red', 'blue']
+		self.run()
+
+	def __str__(self):
+		return 'Q1: Linear SVM for Two-class Problem'
+
+	def readData(self, data):
+		df = pd.read_csv(data['filename'], names = data['col_names'])
+		return df
+
+	#https://scikit-learn.org/stable/modules/generated/sklearn.svm.LinearSVC.html
+	def svm(self, df, C):
+		X = df.iloc[:, :2]
+		y = df.iloc[:, 2]
+		clf = LinearSVC(random_state = self.randomState, tol = self.tolerance, C = C, max_iter = self.maxIters)
+		clf.fit(X, y)
+		return clf.score(X, y), clf.coef_[0], clf.intercept_
+
+	def plotScatter(self, data, df):
+		att_1 = df.iloc[:, 0]
+		att_2 = df.iloc[:, 1]
+		label = df.iloc[:, 2]
+		plt.scatter(att_1, att_2, c = label, cmap = matplotlib.colors.ListedColormap(self.color))
+		plt.title(data['name'])
+		plt.xlabel('Att 1')
+		plt.ylabel('Att 2')
+		plt.show()
+
+	def plotLine(self, i, data, df, CResults):
+		# att1 * coef [0] + att2 * coef [1] + interc = 0 
+		# att2 = (-interc - att1 * coef [0]) / coef [1]
+		att_1 = df.iloc[:, 0]
+		att_2 = df.iloc[:, 1]
+		label = df.iloc[:, 2]
+		att_1_range = np.linspace(np.min(att_1), np.max(att_1), 100)
+		
+		plt.scatter(att_1, att_2, c = label, cmap = matplotlib.colors.ListedColormap(self.color))
+		for CResult in CResults:
+			#this is done to make the graph more visible
+			if (i == 0 and CResult['C'] == 0.001):
+				att_1_range = np.linspace(np.min(1.7), np.max(2.3), 100)
+			elif (i == 0 and CResult['C'] == 0.01):
+				att_1_range = np.linspace(np.min(2.27), np.max(2.35), 100)
+			elif (i == 0 and (CResult['C'] == 0.1 or CResult['C'] == 1)): 
+				att_1_range = np.linspace(np.min(att_1), np.max(att_1), 100)		
+			att_2_val = (- CResult['intercept'] - att_1_range * CResult['coefficients'][0]) / CResult['coefficients'][1]
+			plt.plot(att_1_range, att_2_val, label = 'C: ' + str(CResult['C']) + ' Score: ' + str(CResult['score']))
+		plt.title(data['name'])
+		plt.xlabel('Att 1')
+		plt.ylabel('Att 2')
+		plt.legend()
+		plt.show()
+
+	def run(self, i = 0):
+		'''
+		CResults = [{
+			'C': 0.001 or 0.01 or 0.1 or 1,
+			'score': accuracy,
+			'coefficients': [coef[0], coef[1]],
+			'intercept': y-intercept
+		}]
+		'''
+		df_1 = self.readData(self.dataset_1)
+		df_2 = self.readData(self.dataset_2)
+		self.plotScatter(self.dataset_1, df_1)
+		self.plotScatter(self.dataset_2, df_2)
+		for df in [df_1, df_2]:
+			CResults = []
+			data = self.dataset_1 if (i == 0) else self.dataset_2 
+			for C in self.C:
+				score, coefficients, intercept = self.svm(df, C)
+				CResult = {
+					'C': C,
+					'score': score,
+					'coefficients': coefficients,
+					'intercept': intercept
+				}
+				CResults.append(CResult)
+			self.plotLine(i, data, df, CResults)
+			i += 1
+Q1()
+#########################################################################################################################################################
+
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib
+import pandas as pd
+from sklearn.svm import LinearSVC
+from sklearn.model_selection import KFold
+import os
+from sklearn.utils.testing import ignore_warnings
+from sklearn.exceptions import ConvergenceWarning
+import time
+from sklearn.svm import SVC
+import matplotlib.pyplot as plt
+from matplotlib.colors import ListedColormap
+import numpy as np
+import seaborn as sb
+from sklearn.ensemble import AdaBoostClassifier
+
+class Q2a():
+    def __init__(self):
+        self.CRange = [0.1, 1, 10, 100]
+        df, df_A, df_B = self.getData()
+        self.plot(df_A, df_B)
+        self.createFolder()
+        self.createData(df)
+        results = self.run()
+        C, bestAccuracy, intercept, coef, accuracies = self.getBestAccuracy(results, self.CRange)
+        
+        print('Best:', 'C:', C, 'Best Accuracy:', bestAccuracy, intercept, coef)
+        print()
+        print('Accuracy of C: 0.1:', np.mean(accuracies[0.1]) * 100, '%')
+        print('Accuracy of C: 1:', np.mean(accuracies[1]) * 100, '%')
+        print('Accuracy of C: 10:', np.mean(accuracies[10]) * 100, '%')
+        print('Accuracy of C: 100:', np.mean(accuracies[100]) * 100, '%')
+
+        self.plotBestDB(df, C, intercept, coef, bestAccuracy)
+        
+    def getData(self):
+        df_A = pd.read_csv('classA.csv', names = ['att_1', 'att_2', 'class'])
+        df_B = pd.read_csv('classB.csv', names = ['att_1', 'att_2', 'class'])
+        df_A.loc[:, 'class'] = 1
+        df_B.loc[:, 'class'] = 0
+        df = pd.concat([df_A, df_B], ignore_index = True)
+
+        df = df.sample(frac = 1)
+        return df, df_A, df_B
+    
+    def plot(self, df_A, df_B):
+        plt.scatter(df_A.iloc[:, 0], df_A.iloc[:, 1], c = 'red', label = 'A')
+        plt.scatter(df_B.iloc[:, 0], df_B.iloc[:, 1], c = 'blue', label = 'B')
+        plt.title('Q2 class data')
+        plt.xlabel('Att 1')
+        plt.ylabel('Att 2')
+        plt.show()
+    
+    def createFolder(self, i = 0, n = 10):
+        for i in range(n):
+            if not os.path.exists('./data/q2/fold_' + str(i) + '/'):
+                os.makedirs('./data/q2/fold_' + str(i) + '/')
+        print('Done creatng folders')
+
+    def createData(self, dataframe, i = 0, n = 10):
+        for fold in range(n):
+            for i in range(n):
+                cv = KFold(n_splits = n, shuffle = True)
+                for train_index, test_index in cv.split(dataframe):
+                    train, test = dataframe.loc[train_index], dataframe.loc[test_index]
+                    train.to_csv('./data/q2/fold_' + str(fold) + '/train_fold_' + str(i) + '.csv', index = False, header = False)
+                    test.to_csv('./data/q2/fold_' + str(fold) + '/test_fold_' + str(i) + '.csv', index = False, header = False)
+        print('Done creating data for Q2')
+    
+    @ignore_warnings(category=ConvergenceWarning)
+    def svm(self, df_train, df_test, C):
+        clf = LinearSVC(random_state = 0, tol = 1e-6, C = C, max_iter = 1e6)
+        clf.fit(df_train.iloc[:, :2], df_train.iloc[:, 2])
+        train_acc = clf.score(df_train.iloc[:, :2], df_train.iloc[:, 2])
+        test_acc = clf.score(df_test.iloc[:, :2], df_test.iloc[:, 2])
+        return [clf.coef_[0], clf.intercept_, train_acc, test_acc]
+    
+    def getBestAccuracy(self, results, CRange, n = 10):
+        C = -1
+        bestAccuracy = 0
+        intercept = 0
+        coef = [0, 0]
+        accuracies = {0.1: [], 1: [], 10: [], 100: []}
+        for i in range(len(CRange) * n * n):
+            accuracy = results[i][0]['test_acc']
+            accuracies[results[i][0]['C']].append(accuracy)
+            if accuracy > bestAccuracy:
+                C = results[i][0]['C']
+                bestAccuracy = accuracy
+                intercept = results[i][0]['intercept']
+                coef = results[i][0]['coef']
+        return [C, bestAccuracy, intercept, coef, accuracies]
+    
+    
+    def plotBestDB(self, df, C, intercept, coef, bestAccuracy):
+        colors = ['red', 'blue']
+        att_1 = df.iloc[:, 0]
+        att_2 = df.iloc[:, 1]
+        label = df.iloc[:, 2]
+        att_1_range = np.linspace(np.min(att_1), np.max(att_1), 100)
+        att_2_val = (-intercept - att_1_range * coef[0]) / coef[1]
+        plt.scatter(att_1, att_2, c = label, cmap = matplotlib.colors.ListedColormap(colors))
+        plt.plot(att_1_range, att_2_val, '-r', label = ('Accuracy:', bestAccuracy * 100))
+        plt.title('C: ' + str(C))
+        plt.xlabel('Att 1')
+        plt.ylabel('Att 2')
+
+        plt.show()
+        
+    def run(self):
+        results = []
+        CRange = self.CRange
+        start = time.time()
+        for C in CRange:
+            for fold in range(10):
+                for i in range(10):
+                    df_train = pd.read_csv('./data/q2/fold_' + str(fold) + '/train_fold_' + str(i) + '.csv')
+                    df_test = pd.read_csv('./data/q2/fold_' + str(fold) + '/test_fold_' + str(i) + '.csv')
+                    coef, intercept, train_acc, test_acc = self.svm(df_train, df_test, C)
+                    result = {
+                        "C": C,
+                        "coef": coef,
+                        "intercept": intercept,
+                        "train_acc": train_acc, 
+                        "test_acc": test_acc
+                    }
+                    results.append([result])
+                print('Done Fold:', fold + 1, 'out of 10')
+            print('Done C:', C)
+        end = time.time()
+        print('Time:', (end - start) / 60)
+        return results
+
+
+class Q2b():
+    def __init__(self):
+        self.n = 10
+        self.T = 50
+        self.sample = 100
+        self.C = 1
+        self.clfs = []
+        self.betas = []
+        
+        self.getData()
+        self.adaboost()
+        self.betas = np.array(self.betas)
+        self.predict()
+        self.plot()
+        print('Accuracy:', self.calcScore(), '%')
+        
+    
+    def getData(self):
+        df_A = pd.read_csv('classA.csv', names = ['att_1', 'att_2', 'class'])
+        df_B = pd.read_csv('classB.csv', names = ['att_1', 'att_2', 'class'])
+        df_A.loc[:, 'class'] = 1
+        df_B.loc[:, 'class'] = 0
+        df = pd.concat([df_A, df_B], ignore_index = True)
+        df = df.sample(frac = 1)
+        self.trainX = df.iloc[:, :-1]
+        self.trainY = df.iloc[:, -1]
+    
+    def predict(self, preds = []):
+        T = self.T
+        betas = self.betas
+        clfs = self.clfs
+        alphas = 0.5 * np.log(1 / betas)
+        for i in range(T):
+            pred = clfs[i].predict(self.trainX)
+            preds.append(alphas[i] * pred)
+        preds = np.array(preds)
+        self.finalPred = np.array(np.sign(np.sum(preds, axis = 0)))
+    
+    def calcScore(self):
+        socre = 0
+        n = len(self.trainY)
+        for i in range(n):
+            if (self.trainY.iloc[i] == self.finalPred[i]):
+                socre += 1
+        return self.score * 100
+    
+    def plot(self):
+        trainX = self.trainX
+        trainY = self.trainY
+        clf = AdaBoostClassifier(n_estimators = 100, random_state = 0)
+        clf.fit(trainX, trainY)
+        self.score = clf.score(trainX, trainY)
+        cm_bright = ListedColormap(['#FF0000', '#0000FF'])
+        x_min, x_max = trainX.iloc[:, 0].min() - .5, trainX.iloc[:, 0].max() + .5
+        y_min, y_max = trainX.iloc[:, 1].min() - .5, trainX.iloc[:, 1].max() + .5
+        xx, yy = np.meshgrid(np.arange(x_min, x_max, 0.5), np.arange(y_min, y_max, 0.5))
+        
+        Z = clf.decision_function(np.c_[xx.ravel(), yy.ravel()])
+        Z = Z.reshape(xx.shape)
+
+        ax = plt.gca()
+        ax.contourf(xx, yy, Z, 2, cmap='RdBu', alpha=.5)
+        ax.contour(xx, yy, Z,  2, cmap='RdBu')
+        ax.scatter(trainX.iloc[:,0], trainX.iloc[:,1], c = trainY, cmap = cm_bright)
+        
+        plt.show()
+        
+    def adaboost(self):
+        C = self.C
+        T = self.T
+        sample = self.sample
+        trainX = self.trainX
+        trainY = self.trainY
+        m = len(trainX)
+        D = np.ones(m) / m
+        while (len(self.clfs) < T):
+            i = np.random.choice(m, size = sample)
+            x = trainX.iloc[i]
+            y = trainY.iloc[i]
+            d = D[i]
+            clf = SVC(kernel = 'linear', C = C, tol = 1e-8)
+            clf.fit(x, y, sample_weight = d)
+            pred = clf.predict(trainX)
+            error = np.sum(D[np.where(pred != trainY)])
+            if error < 0.5:
+                beta = error / (1 - error)
+                for j in range(len(D)):
+                    if (pred[j] == trainY[j]): D[j] = beta
+                    else: D[j] = 1
+                D = D / np.sum(D)
+                self.betas.append(beta)
+                self.clfs.append(clf)
+        
+Q2a()
+Q2b()
+#########################################################################################################################################################
+
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib
+import pandas as pd
+from sklearn.svm import LinearSVC
+from sklearn.model_selection import KFold
+from sklearn.utils import shuffle
+from sklearn.utils.testing import ignore_warnings
+from sklearn.exceptions import ConvergenceWarning
+import time
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sb
+from sklearn.manifold import TSNE
+from sklearn.metrics import accuracy_score, confusion_matrix
+
+#models
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier, BaggingClassifier, AdaBoostClassifier, GradientBoostingClassifier
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.naive_bayes import GaussianNB
+import sklearn.neural_network as nn
+from sklearn.multiclass import OneVsRestClassifier
+from sklearn import svm
+
+
+class Q4():
+    def __init__(self):
+        self.n = 10
+        self.classifiers = ['AdaBoost', 'Gradient Boosting', 'Random Forrest', 'SVM', 
+                            'Decision Tree', 'Bagging', 'kNN', 'GausianNB', 'MLPC']
+        self.train, self.test = self.getData()
+        self.eda()
+        gradAccuracies = self.gradientBoosting()
+        self.plotAccuracies(gradAccuracies)
+        modelAccuracies = self.comparison()
+        self.plotBarAccuracies(modelAccuracies)
+        
+    def getData(self):
+        train = shuffle(pd.read_csv('train.csv'))
+        train = train.replace(to_replace = ['WALKING', 'WALKING_UPSTAIRS', 'WALKING_DOWNSTAIRS', 'SITTING', 'STANDING', 'LAYING'], 
+                           value = [0, 1, 2, 3, 4, 5])
+        train = train.drop(['subject'], axis = 1)
+
+        test = pd.read_csv('test.csv')
+        test = test.replace(to_replace = ['WALKING', 'WALKING_UPSTAIRS', 'WALKING_DOWNSTAIRS', 'SITTING', 'STANDING', 'LAYING'], 
+                           value = [0, 1, 2, 3, 4, 5])
+        test = test.drop(['subject'], axis = 1)
+        return [train, test]
+    
+    def seperateData(self, data):
+        X = data.iloc[:, :-1]
+        y = data.iloc[:, -1]
+        return X, y
+    
+    def eda(self, eda = pd.read_csv('train.csv'), edaTest = pd.read_csv('test.csv')):
+        fig = sb.countplot(x = 'Activity' , data = eda)
+        plt.xlabel('Class')
+        plt.ylabel('Count')
+        plt.title('Entries per class Training Data')
+        plt.show()
+        
+        fig = sb.countplot(x = 'Activity' , data = edaTest)
+        plt.xlabel('Class')
+        plt.ylabel('Count')
+        plt.title('Entries per class Testing Data')
+        plt.show()
+
+        sb.boxplot(x = 'Activity', y = 'tBodyAccMag-mean()', data = eda, showfliers=False)
+        plt.ylabel('Body Acceleration Magnitude mean')
+        plt.title('Boxplot of Body Acceleration Magnitude mean for each class')
+        plt.show()
+
+        edaX = eda.drop(['subject', 'Activity'], axis = 1)
+        tsne = TSNE(verbose = 1, perplexity = 50).fit_transform(edaX)
+        sb.scatterplot(x = tsne[:, 0], y = tsne[:, 1], hue = eda['Activity'])
+        plt.title('t-SNE of each class')
+        plt.show()
+
+        tsne = TSNE(verbose = 1, perplexity = 50).fit_transform(edaX)
+        sb.scatterplot(x = tsne[:, 0], y = tsne[:, 1], hue = eda['subject'])
+        plt.title('t-SNE of each subject')
+        plt.show()
+    
+    def plotAccuracies(self, accuracies):
+        plt.plot(accuracies)
+        plt.xlabel('Fold')
+        plt.ylabel('Accuracies')
+        plt.title('Accuracy for each Cross Validation Fold of Training set')
+        plt.show()
+        
+    def plotBarAccuracies(self, accuracies):
+        fig = plt.figure()
+        ax = fig.add_axes([0,0,1,1])
+        ax.bar(self.classifiers, accuracies)
+        plt.xlabel('Classifiers')
+        plt.ylabel('Accuracies')
+        plt.title('Accuracy for each classifier')
+        plt.show()
+    
+    def confusionMatrix(self, true, pred):
+        print(confusion_matrix(true, pred))
+        print()
+        return confusion_matrix(true, pred)
+    
+    def accuracy(self, true, pred):
+        return accuracy_score(true, pred) * 100
+    
+    def gradientBoosting(self, count = 0):
+        accuracies = []
+        train = self.train
+        start = time.time()
+        for i in range(self.n):
+            cv = KFold(n_splits = self.n, shuffle = True)
+            for train_index, test_index in cv.split(train):
+                dataTrain = train.iloc[train_index]
+                dataTest = train.iloc[test_index]
+                trainX, trainY = self.seperateData(dataTrain)
+                testX, testY = self.seperateData(dataTest)
+
+                gb = GradientBoostingClassifier(n_estimators = 200)
+                gb.fit(trainX, trainY)
+                predgb = gb.predict(testX)
+                accuracies.append(self.accuracy(testY, predgb))
+
+        print('Time taken:', (time.time() - start) / 60, 'min')    
+        print('Mean accuracy of train set:', np.mean(accuracies))
+        testX, testY = self.seperateData(self.test)
+        pred = gb.predict(testX)
+        print('Accuracy of test set:', self.accuracy(testY, pred))
+        print('Confusion Matrix of test set:')
+        self.confusionMatrix(testY, pred)
+        return accuracies
+    
+    def comparison(self):
+        accuracies = []
+        trainX, trainY = self.seperateData(self.train)
+        testX, testY = self.seperateData(self.test)
+        start = time.time()
+        
+        #1.AdaBoost
+        ab = AdaBoostClassifier(LogisticRegression(), n_estimators = 200)
+        ab.fit(trainX, trainY)
+        predab = ab.predict(testX)
+        accuracies.append(self.accuracy(testY, predab))
+        print('Adaboost')
+        self.confusionMatrix(testY, predab)
+        
+        #2.Gradient Boosting
+        gb = GradientBoostingClassifier(n_estimators = 200)
+        gb.fit(trainX, trainY)
+        predgb = gb.predict(testX)
+        accuracies.append(self.accuracy(testY, predgb))
+        print('Done Gradient Boosting')
+        self.confusionMatrix(testY, predgb)
+            
+        #3.Random Forest
+        rf = RandomForestClassifier(n_estimators = 200)
+        rf.fit(trainX, trainY)
+        predrf = rf.predict(testX)
+        accuracies.append(self.accuracy(testY, predrf))
+        print('Random Forrest')
+        self.confusionMatrix(testY, predrf)
+        
+        #4.SVM
+        ovr = OneVsRestClassifier(svm.SVC(kernel = 'linear', probability = True, random_state = 0))
+        ovr.fit(trainX, trainY)
+        predovr = ovr.predict(testX)
+        accuracies.append(self.accuracy(testY, predovr))
+        print('SVM')
+        self.confusionMatrix(testY, predovr)
+        
+        #5.Decision Tree
+        dt = DecisionTreeClassifier()
+        dt.fit(trainX, trainY)
+        preddt = dt.predict(testX)
+        accuracies.append(self.accuracy(testY, preddt))
+        print('Decision Trees')
+        self.confusionMatrix(testY, preddt)
+        
+        #6.Bagging
+        bag = BaggingClassifier(n_estimators = 200)
+        bag.fit(trainX, trainY)
+        predbag = bag.predict(testX)
+        accuracies.append(self.accuracy(testY, predbag))
+        print('Bagging')
+        self.confusionMatrix(testY, predbag)
+        
+        #7.kNN
+        knn = KNeighborsClassifier()
+        knn.fit(trainX, trainY)
+        predknn = knn.predict(testX)
+        accuracies.append(self.accuracy(testY, predknn))
+        print('kNN')
+        self.confusionMatrix(testY, predknn)
+        
+        #8.gausianNB
+        gnb = GaussianNB()
+        gnb.fit(trainX, trainY)
+        predgnb = gnb.predict(testX)
+        accuracies.append(self.accuracy(testY, predgnb))
+        print('Gaussian Naive Bayes')
+        self.confusionMatrix(testY, predgnb)
+        
+        #9.MLPC
+        mlpc = nn.MLPClassifier(hidden_layer_sizes = (50, 50), max_iter = 1000, early_stopping = True, random_state = 0)
+        mlpc.fit(trainX, trainY)
+        predmlpc = dt.predict(testX)
+        accuracies.append(self.accuracy(testY, predmlpc))
+        print('Multi-layer Perceptron classifier')
+        self.confusionMatrix(testY, predmlpc)
+        
+        print('Time taken:', (time.time() - start) / 60, 'min')
+        print(accuracies)
+        
+        return accuracies
+Q4()
+#########################################################################################################################################################
