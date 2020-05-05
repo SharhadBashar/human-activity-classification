@@ -8,8 +8,6 @@ from sklearn.utils import shuffle
 from sklearn.utils.testing import ignore_warnings
 from sklearn.exceptions import ConvergenceWarning
 import time
-import pandas as pd
-import matplotlib.pyplot as plt
 import seaborn as sb
 from sklearn.manifold import TSNE
 from sklearn.metrics import accuracy_score, confusion_matrix
