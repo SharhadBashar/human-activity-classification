@@ -133,7 +133,7 @@ class IBM():
         gb.fit(trainX, trainY)
         predgb = gb.predict(testX)
         accuracies.append(self.accuracy(testY, predgb))
-        print('Done Gradient Boosting')
+        print('Gradient Boosting')
             
         #3.Random Forest
         rf = RandomForestClassifier(n_estimators = 200)
