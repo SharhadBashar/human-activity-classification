@@ -184,7 +184,7 @@ class Q4():
         accuracies.append(self.accuracy(testY, predmlpc))
         print('Multi-layer Perceptron classifier')
         
-        #. KMeans
+        #10. KMeans
         kmeans = KMeans(n_clusters = 6)
         kmeans.fit(trainX)
         predKMeans = kmeans.labels_
