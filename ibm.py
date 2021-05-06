@@ -24,7 +24,7 @@ from sklearn import svm
 from sklearn.cluster import KMeans
 
 
-class Q4():
+class IBM():
     def __init__(self):
         self.n = 10
         self.classifiers = ['AdaBoost', 'Gradient Boosting', 'Random Forrest', 'SVM', 
@@ -195,4 +195,4 @@ class Q4():
         print(accuracies)
         
         return accuracies
-Q4()
+IBM()
