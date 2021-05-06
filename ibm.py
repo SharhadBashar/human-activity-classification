@@ -28,7 +28,7 @@ class Q4():
     def __init__(self):
         self.n = 10
         self.classifiers = ['AdaBoost', 'Gradient Boosting', 'Random Forrest', 'SVM', 
-                            'Decision Tree', 'Bagging', 'kNN', 'GausianNB', 'MLPC']
+                            'Decision Tree', 'Bagging', 'kNN', 'GausianNB', 'MLPC', 'KMeans']
         self.train, self.test = self.getData()
         self.eda()
         self.elbow(self.train)
